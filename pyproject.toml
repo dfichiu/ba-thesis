@@ -1,11 +1,15 @@
 [tool.poetry]
-name = "simple-pipeline"
+name = "ba-thesis"
 version = "0.1.0"
 description = ""
 authors = ["Daniela Fichiu <danielafichiu@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+plotly = "^5.14.0"
+pandas = "^1.5.3"
+scikit-learn = "^1.2.2"
+nltk = "^3.8.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
