@@ -5,11 +5,15 @@ description = ""
 authors = ["Daniela Fichiu <danielafichiu@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = ">=3.10,<3.12"
 plotly = "^5.14.0"
 pandas = "^1.5.3"
 scikit-learn = "^1.2.2"
 nltk = "^3.8.1"
+torch-hd = "^5.1.0"
+jupyter = "^1.0.0"
+tensorflow = "^2.12.0"
+torch = "^2.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
