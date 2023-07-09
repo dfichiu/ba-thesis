@@ -214,6 +214,18 @@ html5lib = ["html5lib"]
 lxml = ["lxml"]
 
 [[package]]
+name = "better-abc"
+version = "0.0.3"
+description = "Python ABC plus abstract attributes"
+category = "main"
+optional = false
+python-versions = "*"
+files = [
+    {file = "better-abc-0.0.3.tar.gz", hash = "sha256:a880fd6bc9675da2ec991e8712a555bffa0f12722efed78c739f78343cf989f6"},
+    {file = "better_abc-0.0.3-py3-none-any.whl", hash = "sha256:3ae73b473fbeb536a548f542984976e80b821676ae6e18f14e24d8e180647187"},
+]
+
+[[package]]
 name = "bleach"
 version = "6.0.0"
 description = "An easy safelist-based HTML-sanitizing tool."
@@ -3811,4 +3823,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"
-content-hash = "8aae6ee5cae71d2c41e6af5e9cfe596e862228df77f02b08b588a548bf267249"
+content-hash = "9428d3d6b0e7ef11bb84bcc7a66b2a9cf8bf4ba5ac465babec1270ba05321560"

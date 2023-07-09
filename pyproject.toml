@@ -17,6 +17,7 @@ torch = "^2.0.0"
 lab = "^7.3"
 ipykernel = "^6.23.1"
 torchvision = "^0.15.2"
+better-abc = "^0.0.3"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
