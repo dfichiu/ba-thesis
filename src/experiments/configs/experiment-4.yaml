@@ -1,0 +1,21 @@
+config: 
+  experiment_title: " 'Experiment 4' "
+  experiment_type: "run"
+  dim: 2000
+  initial_training:
+   data_path: "../data/experiment_4/initial_training_data.txt"
+   chunk_sizes: [1, 2,  3, 4]
+   epochs: [1]
+  training: 
+   data_path: "../data/experiment_4/data.txt"
+   chunk_sizes: [1, 2, 3,  4]
+   epochs: [10]
+  inference:
+   sentences: ["One night there flew over the city a little Swallow.",  "His friends had gone away to Egypt six weeks before, but he had stayed behind, for he was in love with the most beautiful Reed.",  "He had met her early in the spring as he was flying down the river after a big yellow moth, and had been so attracted by her slender waist that he had stopped to talk to her."]
+   tracked_tokens: ["red"]
+  DSDM:
+    ema_time_period: 5000
+    learning_rate_update: 0.1    
+    temperature: 0.4
+    normalize: True
+   
