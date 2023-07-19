@@ -27,10 +27,22 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # DSDM class
 class DSDM(nn.Module):
-    def __init__(self, address_size, ema_time_period, learning_rate_update, temperature, normalize=False):
+    def __init__(
+        self,
+        address_size,
+        ema_time_period,
+        learning_rate_update,
+        temperature,
+        prune_mode=None,
+        max_size_address_space=None,
+        remove_percentage=None,
+        bin_threshold=None,
+        normalize=False
+    ):
         super(DSDM, self).__init__()
         self.address_size = address_size
         self.addresses = torch.tensor([]).to(device)
+        self.bins = torch.tensor([]).to(device)
 
         self.normalize = normalize
 
@@ -41,6 +53,16 @@ class DSDM(nn.Module):
         self.learning_rate_update = learning_rate_update
 
         self.temperature = temperature
+
+        # Set statistics counters.
+        self.n_updates = 0
+        self.n_expansions = 0
+
+        # Set pruning hyperparameters.
+        self.prune_mode = prune_mode
+        self.max_size_address_space = max_size_address_space
+        self.remove_percentage = remove_percentage
+        self.bin_threshold = bin_threshold
         
         
     def retrieve(self, query_address):
@@ -72,7 +94,8 @@ class DSDM(nn.Module):
         # The memory is instantiated with the first observation.
         if self.addresses.shape[0] == 0:
             self.addresses = torch.cat((self.addresses, query_address.view(1, -1)))
-            
+            self.bins = torch.cat((self.bins, torch.tensor([0])))
+            self.n_expansions += 1  
             return
         
         cos = torch.nn.CosineSimilarity()
@@ -94,62 +117,50 @@ class DSDM(nn.Module):
         if min_distance > self.ema: # If the minimum distance is bigger, create a new address.
             # Add a new entry to the address matrix/tensor equal to the target address.
             self.addresses = torch.cat((self.addresses, query_address.view(1, -1)))
+            self.bins = torch.cat((self.bins, torch.tensor([0])))
+            self.n_expansions += 1  
         else: # If the minimum distance is smaller or equal, update the memory addresses.
             # Apply the softmin function to the distance tensor the get the softmin weights.
             softmin_weights = F.softmin(distances/self.temperature, dim=-1)
             # Update the memory address space.
             self.addresses += self.learning_rate_update * torch.mul(softmin_weights.view(-1, 1), query_address - self.addresses)
-         
+            self.bins += softmin_weights
+            self.n_updates += 1
+
+        self.prune()
+            
         return
 
-    # TODO: Original unadapted DSDM code.
+    
     def prune(self):
-        N_pruning = self.N_prune  # Maximum no. of (address) nodes the memory can have. 
-        n_class = self.M.size(1)
-        # If the maximum number of nodes has been reached, apply LOF
-        # to get normalcy scores.
-        if len(self.Address) > N_pruning:   
-            clf = LocalOutlierFactor(n_neighbors=min(len(self.Address), self.n_neighbors), contamination=self.contamination)
-            A = self.Address
-            M = self.M
-            y_pred = clf.fit_predict(A.cpu())
-            X_scores = clf.negative_outlier_factor_
-            x_scor = torch.tensor(X_scores)
+        keep_mask = [True] * len(self.addresses)  # Assume no pruning is needed.
 
-            # "Naive" pruning mode.
-            if self.prune_mode == "naive":
-                if len(A) > N_pruning:
-                    prun_N_addr = len(A) - N_pruning # No. of addresses that must be pruned out.
-                    val, ind = torch.topk(x_scor, prun_N_addr) 
-                    idx_remove = [True] * len(A)
-                    for i in ind:
-                        idx_remove[i] = False
-                    self.M = self.M[idx_remove] # Delete content from address.
-                    self.Address = self.Address[idx_remove] # Delete address.
+        if self.prune_mode is not None: 
+            if (self.prune_mode == "fixed-size" or self.prune_mode == "remove-percentage") and (len(self.addresses) > self.max_size_address_space):
+                if self.prune_mode == "fixed-size":
+                    n_prune = len(self.addresses) - self.max_size_address_space
+                else:
+                    n_prune = int(self.remove_percentage * len(self.addresses))
+                    
+                val, idx = torch.topk(
+                    self.bins.view(1, -1),
+                    k=n_prune,
+                    largest=False
+                ) 
+                
+                for i in idx:
+                    keep_mask[i] = False
+                
+            if self.prune_mode == "threshold":
+                keep_mask = self.bins.view(1, -1) >= self.bin_threshold
 
-            # "Balance" pruning mode.
-            # Idea: Prune from each class instead of the nodes with the highest densities.
-            if self.prune_mode == "balance":
-                prun_N_addr = len(A) - N_pruning  # No. of addresses that must be pruned out.
-                mean_addr = N_pruning // n_class  # Max. number of allowed nodes per class.
-                val, ind = torch.sort(x_scor, descending=True)
-
-                count = prun_N_addr
-                idx_remove = [True] * len(A)
-                idx = 0
-                arg_m = torch.argmax(M, axis=1)  # Get predicted class.
-                N_remaining = torch.bincount(arg_m)  # Count the frequency of each value, i.e., no. of predictions for each class.
-                while count != 0:
-                    idx +=1
-                    indice = ind[idx]
-                    if N_remaining[arg_m[indice]] > (N_pruning // n_class):
-                        N_remaining[arg_m[indice]] -= 1
-                        idx_remove[ind[idx]] = False
-                        count-=1
-                self.M = self.M[idx_remove]
-                self.Address = self.Address[idx_remove]
+        # Prune memory space.
+        self.addresses = self.addresses[keep_mask]  # Delete addresses.
+        self.bins = self.bins[keep_mask]  # Delete bins.
+            
         return
 
+    
     def get_memory_type(self) -> str:
         """"""
         return "normalized" if self.normalize == True else "unnormalized"

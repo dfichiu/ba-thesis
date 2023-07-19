@@ -22,6 +22,9 @@ nbconvert = "^7.6.0"
 papermill = "^2.4.0"
 jupyterlab = "^4.0.2"
 seaborn = "^0.12.2"
+wikiextractor = "^3.0.6"
+apache-beam = "^2.49.0"
+mwparserfromhell = "^0.6.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

@@ -113,7 +113,8 @@ def get_most_similar_HVs(
 def display_and_get_memory_addresses(
     memory: DSDM.DSDM,
     cleanup: dict,
-    display_addresses=False
+    k=10,
+    display_addresses=False,
 ):
     """
     """
@@ -121,7 +122,7 @@ def display_and_get_memory_addresses(
 
     concepts_df = pd.DataFrame(columns=['memory_address', 'memory_concept'])
     
-    for address in memory.addresses:
+    for address in memory.addresses[: k]:
         sims_df = pd.DataFrame(columns=['token', 'similarity'])
         for key, item in cleanup.items():
             sims_df = pd.concat([sims_df, pd.DataFrame([{'token': key, 'similarity': thd.cosine_similarity(item,  address).item()}])])
@@ -140,7 +141,7 @@ def display_and_get_memory_addresses(
     concepts_stats = pd.DataFrame(concepts_df.groupby('memory_concept_str').size()).rename(columns={0: 'count', 'memory_concept_str': 'concept'}).sort_values('count', ascending=False)
     # Rename index.
     concepts_stats.index.name = 'concept'
-    concepts_stats = concepts_stats.sort_values('concept', ascending=True)
+    #concepts_stats = concepts_stats.sort_values('concept', ascending=True)
     display(concepts_stats)
     
     return concepts_df
@@ -156,7 +157,7 @@ def infer(
     sims_df = pd.DataFrame(columns=['sentence','token', 'similarity']) 
     
     for inference_sentence in inference_sentences:
-        sentence_sims_df = get_similarities_to_atomic_HVs(dim, cleanup, memory, inference_sentence)
+        sentence_sims_df = get_similarities_to_atomic_HVs(dim, cleanup, memory, inference_sentence).sort_values('similarity', ascending=False).head(10)
         # Extract concept.
         extracted_concept = get_most_similar_HVs(sentence_sims_df)
         sims_df = pd.concat([sims_df, sentence_sims_df])

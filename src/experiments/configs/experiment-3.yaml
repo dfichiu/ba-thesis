@@ -11,8 +11,8 @@ config:
    chunk_sizes: []
    epochs: [10]
   inference:
-   sentences: ["The green flower is big.", "The red flower is mine.", "House.", "The purple ring is mine."]
-   tracked_tokens: ["red"]
+   sentences: ["The big house.", "Small house."]
+   tracked_tokens: ["big"]
   DSDM:
     ema_time_period: 5000
     learning_rate_update: 0.1    

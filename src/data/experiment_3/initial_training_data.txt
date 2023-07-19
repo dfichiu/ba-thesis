@@ -4,7 +4,7 @@ The blue house is tiny.
 The red house is big.
 The red house is small.
 The green house is mine.
-The flower is mine.
-The flower is small.
-The house is big.
-The ring is mine.
+The red house is mine.
+The blue house is small.
+The green house is big.
+The red house is mine.

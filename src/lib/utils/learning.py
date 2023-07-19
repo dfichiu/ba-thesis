@@ -155,7 +155,7 @@ def online_learning_with_inference(
                     
                     if epoch == 0:  # First epoch
                         sims_dfs[memory_type] = sims_df
-                    if epoch == sentence_epochs - 1:  # Last epoch
+                    if epoch == sentence_epochs - 1 and sentence_epochs - 1 > 0:  # Last epoch, which shouldn't be the first epoch because the column would get duplicated.
                         sims_dfs[memory_type] = sims_dfs[memory_type].merge(sims_df, left_index=True, right_index=True)
 
                     # Track similarities of partiuclar tokens over the entire learning scenaio.
