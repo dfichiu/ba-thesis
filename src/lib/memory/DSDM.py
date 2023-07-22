@@ -12,7 +12,6 @@ import random
 import pandas as pd
 
 from sklearn.metrics import pairwise_distances
-from sklearn.neighbors import LocalOutlierFactor
 
 import torch
 import torchhd as thd
@@ -63,11 +62,29 @@ class DSDM(nn.Module):
         self.max_size_address_space = max_size_address_space
         self.remove_percentage = remove_percentage
         self.bin_threshold = bin_threshold
+
+    
+    def get_memory_type(self) -> str:
+        return "normalized" if self.normalize == True else "unnormalized"
+
+    
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    
+    def set_learning_rate_update(self, learing_rate_update):
+        self.learning_rate_update = learning_rate_update
         
         
-    def retrieve(self, query_address):
+    def retrieve(
+        self,
+        query_address,
+        retrieve_mode="pooling",
+        k=None
+    
+    ):
         with torch.no_grad():
-            retrieved_content = torch.tensor([]).to(device)
+            #retrieved_content = torch.tensor([]).to(device)
 
             cos = torch.nn.CosineSimilarity()
             # Calculate the cosine similarities.
@@ -81,13 +98,25 @@ class DSDM(nn.Module):
             # Calculate the softmin weights.
             softmin_weights = F.softmin(distances/self.temperature, dim=-1)
 
-            # Weight the memory addresses with the softmin weights.
-            weighted_addresses = torch.matmul(softmin_weights, self.addresses.to(device)).view(-1)
+            if retrieve_mode == "pooling":
+                # Weight the memory addresses with the softmin weights.
+                weighted_addresses = torch.matmul(softmin_weights, self.addresses.to(device)).view(-1)
+    
+                # Pool the weighted memory addresses to create the output and return it.
+                return torch.sum(weighted_addresses.view(1, -1), 0)
+            else:  # retrieve_mode == "top_k"
+                return_mask = [False] * len(self.addresses)
+                
+                val, idx = torch.topk(
+                    softmin_weights.view(1, -1),
+                    k=k,
+                    largest=True
+                )
 
-            # Pool the weighted memory addresses to create the output.
-            retrieved_content = torch.sum(weighted_addresses.view(1, -1), 0)
-
-        return retrieved_content   
+                for i in idx:
+                    return_mask[i] = True
+                
+                return self.addresses[return_mask]  
 
     
     def save(self, query_address):
@@ -161,6 +190,3 @@ class DSDM(nn.Module):
         return
 
     
-    def get_memory_type(self) -> str:
-        """"""
-        return "normalized" if self.normalize == True else "unnormalized"

@@ -21,12 +21,12 @@ import torch.nn as nn
 import torch.nn.functional as F 
 
 # Type checking
-from typing import List
+import typing 
 
 def generate_atomic_HVs_from_tokens_and_add_them_to_cleanup(
     dim: int,
     cleanup: dict,
-    tokens: List[str]
+    tokens: typing.List[str]
 ) -> None:
     """
     """
@@ -46,9 +46,9 @@ def generate_atomic_HVs_from_tokens_and_add_them_to_cleanup(
 def generate_chunk_representations_and_save_them_to_memory(
     dim: int,
     cleanup: dict,
-    memory: List[DSDM.DSDM],
-    tokens: List[str],
-    chunk_sizes: List[int] = [],
+    memory: typing.List[DSDM.DSDM],
+    tokens: typing.List[str],
+    chunk_sizes: typing.List[int] = [],
     output: bool = False
 ) -> None:
     """
@@ -93,14 +93,14 @@ def generate_chunk_representations_and_save_them_to_memory(
 
 def online_learning_with_inference(
     cleanup: dict,
-    memories: List[DSDM.DSDM],
+    memories: typing.List[DSDM.DSDM],
     data_path: str,
-    chunk_sizes: List[int],
-    epochs: List[int],
+    chunk_sizes: typing.List[int],
+    epochs: typing.List[int],
     infer=False,
     inference_sentences=None,
     tracked_tokens=None,    
-) ->  tuple[pd.DataFrame, pd.DataFrame] | None:
+) -> typing.Union[tuple[pd.DataFrame, pd.DataFrame], None]:
     """
     """
     # Load data.
