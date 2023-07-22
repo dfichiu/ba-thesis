@@ -5,7 +5,7 @@ description = ""
 authors = ["Daniela Fichiu <danielafichiu@gmail.com>"]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.9,<3.10"
 plotly = "^5.14.0"
 pandas = "^1.5.3"
 scikit-learn = "^1.2.2"
@@ -26,6 +26,7 @@ wikiextractor = "^3.0.6"
 apache-beam = "^2.49.0"
 mwparserfromhell = "^0.6.4"
 transformers = "^4.31.0"
+datasets = "^2.13.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
