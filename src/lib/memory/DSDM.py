@@ -56,6 +56,7 @@ class DSDM(nn.Module):
         # Set statistics counters.
         self.n_updates = 0
         self.n_expansions = 0
+        self.n_deletions = 0
 
         # Set pruning hyperparameters.
         self.prune_mode = prune_mode
@@ -112,7 +113,8 @@ class DSDM(nn.Module):
                     k=k,
                     largest=True
                 )
-
+                
+                idx = idx.cpu().detach().numpy().flatten()
                 for i in idx:
                     return_mask[i] = True
                 
@@ -176,7 +178,9 @@ class DSDM(nn.Module):
                     k=n_prune,
                     largest=False
                 ) 
-                
+
+                # Convert tensor to flattened numpy array.
+                idx = idx.cpu().detach().numpy().flatten()
                 for i in idx:
                     keep_mask[i] = False
                 
@@ -186,6 +190,8 @@ class DSDM(nn.Module):
         # Prune memory space.
         self.addresses = self.addresses[keep_mask]  # Delete addresses.
         self.bins = self.bins[keep_mask]  # Delete bins.
+
+
             
         return
 
