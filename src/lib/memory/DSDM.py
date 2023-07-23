@@ -24,7 +24,7 @@ from typing import List
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# DSDM class
+
 class DSDM(nn.Module):
     def __init__(
         self,
@@ -86,6 +86,7 @@ class DSDM(nn.Module):
     ):
         with torch.no_grad():
             #retrieved_content = torch.tensor([]).to(device)
+            self.prune()
 
             cos = torch.nn.CosineSimilarity()
             # Calculate the cosine similarities.
@@ -113,7 +114,8 @@ class DSDM(nn.Module):
                     k=k,
                     largest=True
                 )
-                
+
+                # Convert tensor to flattened numpy array.
                 idx = idx.cpu().detach().numpy().flatten()
                 for i in idx:
                     return_mask[i] = True
@@ -157,8 +159,6 @@ class DSDM(nn.Module):
             self.addresses += self.learning_rate_update * torch.mul(softmin_weights.view(-1, 1), query_address - self.addresses)
             self.bins += softmin_weights
             self.n_updates += 1
-
-        self.prune()
             
         return
 
@@ -187,11 +187,11 @@ class DSDM(nn.Module):
             if self.prune_mode == "threshold":
                 keep_mask = self.bins.view(1, -1) >= self.bin_threshold
 
+        
+        self.n_deletions += np.sum(keep_mask)
         # Prune memory space.
         self.addresses = self.addresses[keep_mask]  # Delete addresses.
         self.bins = self.bins[keep_mask]  # Delete bins.
-
-
             
         return
 
