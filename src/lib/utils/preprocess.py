@@ -1,4 +1,6 @@
 import nltk
+nltk.download('punkt')
+nltk.download('stopwords')
 import nltk.data
 from nltk.corpus import stopwords
 from nltk import tokenize

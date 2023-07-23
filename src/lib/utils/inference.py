@@ -3,7 +3,7 @@ import ipywidgets as widgets
 import itertools
 
 from lib.memory import DSDM
-from lib.utils import preprocess, utils
+from lib.utils import cleanup, preprocess, utils
 
 import math
 import matplotlib
@@ -28,77 +28,52 @@ import torch.nn.functional as F
 # Type checking
 import typing
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def generate_query(
     dim: int,
-    cleanup: dict,
+    cleanup: cleanup.Cleanup,
     tokens: typing.List[str]
 ) -> torch.Tensor:
-    """
-    """
+    
     n = len(tokens)
-    HC_representation = thd.MAPTensor.empty(1, dim)
+    hc_representation = thd.MAPTensor.empty(1, dim).to(device)
 
     # Iterate through all tokens.
     for i in range(n):
         # The token hasn't been encountered before.
-        if cleanup.get(tokens[i]) == None:
-            # Generate an atomic HC for the unencountered token.
-            atomic_HC = thd.MAPTensor.random(1, dim)[0]
-            # Add the atomic HC to the cleanup memory.
-            cleanup[tokens[i]] = atomic_HC
-            # Add the atomic (i.e., superpose) HC to the chunk HC representation.
-            HC_representation += atomic_HC
+        if cleanup.get_item(tokens[i]) == None:
+            cleanup.add(tokens[i])
         # The token has been encountered before.
         else:
-            HC_representation += cleanup[tokens[i]]
+            hc_representation += cleanup.get_item(tokens[i])
 
-    return HC_representation
+    return hc_representation
 
 
-def get_similarities_to_atomic_HVs(
-    dim: int,
-    cleanup: dict,
-    memory: DSDM.DSDM,
-    sentence: str,
-    retrieve_mode: str = "pooling",
-    k: int = None
+def get_similarities_to_atomic_set(
+    content: torch.tensor,
+    cleanup: cleanup.Cleanup,
+    k: int = 10
 ) -> pd.DataFrame:
-    
-    # Actual inteference 
-    retrieved_content = memory.retrieve(
-        query_address=generate_query(
-            dim,
-            cleanup,
-            preprocess.preprocess_text(sentence)[0]
-        ),
-        retrieve_mode=retrieve_mode,
-        k=k,
-    )
-
-    if retrieve_mode == "pooling":
-        sims_df = pd.DataFrame(
-            columns=[
-                'sentence',
-                'token',
-                'similarity'
-            ]
+        atomic_similarities = F.cosine_similarity(
+            cleanup.items,
+            content
+        )
+        val, idx = torch.topk(
+                    atomic_similarities.view(1, -1),
+                    k=k,
+                    largest=True
         )
         
-        for token, atomic_HC in cleanup.items():
-            sims_df = pd.concat([
-                sims_df,
-                pd.DataFrame([
-                    {
-                        'sentence': sentence,
-                        'token': token,
-                        'similarity': thd.cosine_similarity(atomic_HC, retrieved_content).item()
-                    }
-                ])
-            ])
+        sims_df = pd.DataFrame(
+            data={
+                'token': np.array(list(cleanup.index))[idx.cpu().detach().numpy().flatten()],
+                'similarity': val.cpu().detach().numpy().flatten()
+            }
+        )
         return sims_df
-    else:
-        return retrieved_content
 
 
 def get_most_similar_HVs(
@@ -170,58 +145,75 @@ def display_and_get_memory_addresses(
 
 def infer(
     dim: int,
-    cleanup: dict,
+    cleanup: cleanup.Cleanup,
     memory: DSDM.DSDM,
     inference_sentences: typing.List[str],
     retrieve_mode: str = "pooling",
     k=None,
     output=False
 ) -> typing.Union[pd.DataFrame, typing.List[typing.List]]:
-    if retrieve_mode == "pooling":
-        sims_df = pd.DataFrame(
-            columns=[
-                'sentence',
-                'token',
-                'similarity'
-            ]
-        ) 
-        
-        for inference_sentence in inference_sentences:
-            sentence_sims_df = get_similarities_to_atomic_HVs(
-                dim,
-                cleanup,
-                memory,
-                inference_sentence,
-                retrieve_mode
-            ).sort_values('similarity', ascending=False).head(10)
-            
-            # Extract concept.
-            #extracted_concept = get_most_similar_HVs(sentence_sims_df)
-            
-            sims_df = pd.concat([sims_df, sentence_sims_df])
-            
-        sims_df = (sims_df.sort_values(['sentence', 'similarity'], ascending=False) 
-                          .set_index(['sentence', 'token'])
-                  )
+
+    retrieved_contents = []
     
-        if output:
-            display(sims_df)
-        return sims_df
-    else:
-        addresses = []
-
-        for inference_sentence in inference_sentences:
-            sentence_addresses = get_similarities_to_atomic_HVs(
+    #if retrieve_mode == "pooling":
+     #   sims_df = pd.DataFrame(columns=['sentence', 'token', 'similarity']) 
+        
+    for inference_sentence in inference_sentences:
+        retrieved_content = memory.retrieve(
+            query_address=generate_query(
                 dim,
                 cleanup,
-                memory,
-                inference_sentence,
-                retrieve_mode,
-                k
-            )
-            addresses.append(sentence_addresses)
+                preprocess.preprocess_text(inference_sentence)[0]
+            ),
+            retrieve_mode=retrieve_mode,
+            k=k,
+        )
+        retrieved_contents.append(retrieved_content)
 
-        return addresses
+    return retrieved_contents
+
+            
+    #         sentence_sims_df = get_similarities_to_atomic_set(
+    #             retrieved_content,
+    #             cleanup,
+    #         )
+    #         # TODO: add k for top.
+    #         sentence_sims_df['sentence'] = [inference_sentence] * len(sentence_sims_df)
+    #         # Extract concept.
+    #         #extracted_concept = get_most_similar_HVs(sentence_sims_df)
+            
+    #         sims_df = pd.concat([sims_df, sentence_sims_df])
+            
+    #     sims_df = sims_df.sort_values(['sentence', 'similarity'], ascending=False) \
+    #                       .set_index(['sentence', 'token'])
+    
+    #     if output:
+    #         display(sims_df)
+    #     return sims_df
+    # else:
+    #     addresses = []
+
+    #     for inference_sentence in inference_sentences:
+    #         retrieved_content = memory.retrieve(
+    #             query_address=generate_query(
+    #                 dim,
+    #                 cleanup,
+    #                 preprocess.preprocess_text(sentence)[0]
+    #             ),
+    #             retrieve_mode=retrieve_mode,
+    #             k=k,
+    #         )
+    #         sentence_addresses = get_similarities_to_atomic_HVs(
+    #             dim,
+    #             cleanup,
+    #             memory,
+    #             inference_sentence,
+    #             retrieve_mode,
+    #             k
+    #         )
+    #         addresses.append(sentence_addresses)
+
+    #     return addresses
 
 
 def get_similarity_matrix_of_addresses_mapping_to_same_concepts(concepts_df: dict) -> None:

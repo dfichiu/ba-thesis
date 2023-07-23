@@ -2,7 +2,7 @@ from IPython.display import display, HTML, Markdown as md
 import itertools
 
 from lib.memory import DSDM
-from lib.utils import inference, utils, preprocess
+from lib.utils import cleanup, inference, utils, preprocess
 
 import math
 import numpy
@@ -23,29 +23,24 @@ import torch.nn.functional as F
 # Type checking
 import typing 
 
+# Set device.
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def generate_atomic_HVs_from_tokens_and_add_them_to_cleanup(
     dim: int,
-    cleanup: dict,
+    cleanup: cleanup.Cleanup,
     tokens: typing.List[str]
 ) -> None:
-    """
-    """
     for token in tokens:
-        # Check if the token has been encountered before by querying the cleanup memory.
-        entry = cleanup.get(token)
-        # If it hasn't, 
-        if entry == None:
-            # Generate a random HV representation for the token.
-            atomic_HV = thd.MAPTensor.random(1, dim)[0]
-            # Add the HV to the cleanup memory.
-            cleanup[token] = atomic_HV
+        cleanup.add(token)
     
     return
 
 
 def generate_chunk_representations_and_save_them_to_memory(
     dim: int,
-    cleanup: dict,
+    cleanup: cleanup.Cleanup,
     memory: typing.List[DSDM.DSDM],
     tokens: typing.List[str],
     chunk_sizes: typing.List[int] = [],
@@ -77,13 +72,13 @@ def generate_chunk_representations_and_save_them_to_memory(
                 if output:
                     print("Not enough tokens left.")
                 break 
-            HC_representation = thd.MAPTensor.empty(1, dim)[0]
+            HC_representation = thd.MAPTensor.empty(1, dim)[0].to(device)
 
             # Construct HC representation.
             for j in range(no_tokens):
                 if output:
                     print(tokens[i + j])
-                HC_representation += cleanup[tokens[i + j]]
+                HC_representation += cleanup.get_item(tokens[i + j])
 
             # Save the chunk HC representation to memory.
             memory.save(HC_representation)
@@ -92,7 +87,7 @@ def generate_chunk_representations_and_save_them_to_memory(
 
 
 def online_learning_with_inference(
-    cleanup: dict,
+    cleanup: cleanup.Cleanup,
     memories: typing.List[DSDM.DSDM],
     data_path: str,
     chunk_sizes: typing.List[int],

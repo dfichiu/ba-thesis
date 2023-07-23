@@ -85,6 +85,7 @@ class DSDM(nn.Module):
     
     ):
         with torch.no_grad():
+            query_address = query_address.to(device)
             #retrieved_content = torch.tensor([]).to(device)
             self.prune()
 
@@ -125,9 +126,21 @@ class DSDM(nn.Module):
     
     def save(self, query_address):
         # The memory is instantiated with the first observation.
+        query_address = query_address.to(device)
+        
         if self.addresses.shape[0] == 0:
-            self.addresses = torch.cat((self.addresses, query_address.view(1, -1)))
-            self.bins = torch.cat((self.bins, torch.tensor([0])))
+            self.addresses = torch.cat(
+                (
+                    self.addresses,
+                    query_address.view(1, -1)
+                )
+            )
+            self.bins = torch.cat(
+                (
+                    self.bins,
+                    torch.tensor([0]).to(device)
+                )
+            )
             self.n_expansions += 1  
             return
         
@@ -149,8 +162,18 @@ class DSDM(nn.Module):
         # Check if the minimum distance is bigger than the adaptive threshold.
         if min_distance > self.ema: # If the minimum distance is bigger, create a new address.
             # Add a new entry to the address matrix/tensor equal to the target address.
-            self.addresses = torch.cat((self.addresses, query_address.view(1, -1)))
-            self.bins = torch.cat((self.bins, torch.tensor([0])))
+            self.addresses = torch.cat(
+                (
+                    self.addresses,
+                    query_address.view(1, -1)
+                )
+            )
+            self.bins = torch.cat(
+                (
+                    self.bins,
+                    torch.tensor([0]).to(device)
+                )
+            )
             self.n_expansions += 1  
         else: # If the minimum distance is smaller or equal, update the memory addresses.
             # Apply the softmin function to the distance tensor the get the softmin weights.
