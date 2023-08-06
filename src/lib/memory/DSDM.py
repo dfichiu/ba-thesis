@@ -211,11 +211,9 @@ class DSDM(nn.Module):
                 keep_mask = self.bins.view(1, -1) >= self.bin_threshold
 
         
-        self.n_deletions += np.sum(keep_mask)
+        self.n_deletions += (~np.array([True, False, True])).astype(int).sum()
         # Prune memory space.
         self.addresses = self.addresses[keep_mask]  # Delete addresses.
         self.bins = self.bins[keep_mask]  # Delete bins.
             
         return
-
-    

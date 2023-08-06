@@ -45,9 +45,7 @@ def generate_query(
         # The token hasn't been encountered before.
         if cleanup.get_item(tokens[i]) == None:
             cleanup.add(tokens[i])
-        # The token has been encountered before.
-        else:
-            hc_representation += cleanup.get_item(tokens[i])
+        hc_representation += cleanup.get_item(tokens[i])
 
     return hc_representation
 
@@ -95,13 +93,17 @@ def get_most_similar_HVs(
     unsimilar_df = df[df['delta'] > delta_threshold].head(1)
     # We initially assume that all the tokens are equally represented.
     idx_cut_in = len(unsimilar_df)
+
     if len(unsimilar_df) > 0:
         idx_cut_in = df[df['delta'] > delta_threshold].head(1).index[0]
+
     # Subdataframe with only the most similar tokens.
     most_similar_tokens_df = df.head(idx_cut_in)
+   
     
     # Get concept as a string.
     concept = most_similar_tokens_df['token'].values
+    display(concept)
     concept.sort()
     #print(concept)
     #display(df)
@@ -147,23 +149,22 @@ def infer(
     dim: int,
     cleanup: cleanup.Cleanup,
     memory: DSDM.DSDM,
-    inference_sentences: typing.List[str],
+    inference_sentences: typing.List[typing.Union[str, typing.List]],
     retrieve_mode: str = "pooling",
     k=None,
     output=False
 ) -> typing.Union[pd.DataFrame, typing.List[typing.List]]:
 
     retrieved_contents = []
-    
-    #if retrieve_mode == "pooling":
-     #   sims_df = pd.DataFrame(columns=['sentence', 'token', 'similarity']) 
         
-    for inference_sentence in inference_sentences:
+    for s in inference_sentences:
+        tokens_list = preprocess.preprocess_text(s)[0] if isinstance(s, str) else s
+
         retrieved_content = memory.retrieve(
             query_address=generate_query(
                 dim,
                 cleanup,
-                preprocess.preprocess_text(inference_sentence)[0]
+                tokens_list
             ),
             retrieve_mode=retrieve_mode,
             k=k,
@@ -172,48 +173,6 @@ def infer(
 
     return retrieved_contents
 
-            
-    #         sentence_sims_df = get_similarities_to_atomic_set(
-    #             retrieved_content,
-    #             cleanup,
-    #         )
-    #         # TODO: add k for top.
-    #         sentence_sims_df['sentence'] = [inference_sentence] * len(sentence_sims_df)
-    #         # Extract concept.
-    #         #extracted_concept = get_most_similar_HVs(sentence_sims_df)
-            
-    #         sims_df = pd.concat([sims_df, sentence_sims_df])
-            
-    #     sims_df = sims_df.sort_values(['sentence', 'similarity'], ascending=False) \
-    #                       .set_index(['sentence', 'token'])
-    
-    #     if output:
-    #         display(sims_df)
-    #     return sims_df
-    # else:
-    #     addresses = []
-
-    #     for inference_sentence in inference_sentences:
-    #         retrieved_content = memory.retrieve(
-    #             query_address=generate_query(
-    #                 dim,
-    #                 cleanup,
-    #                 preprocess.preprocess_text(sentence)[0]
-    #             ),
-    #             retrieve_mode=retrieve_mode,
-    #             k=k,
-    #         )
-    #         sentence_addresses = get_similarities_to_atomic_HVs(
-    #             dim,
-    #             cleanup,
-    #             memory,
-    #             inference_sentence,
-    #             retrieve_mode,
-    #             k
-    #         )
-    #         addresses.append(sentence_addresses)
-
-    #     return addresses
 
 
 def get_similarity_matrix_of_addresses_mapping_to_same_concepts(concepts_df: dict) -> None:
