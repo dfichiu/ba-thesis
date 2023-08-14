@@ -36,12 +36,14 @@ class DSDM(nn.Module):
         max_size_address_space=None,
         remove_percentage=None,
         bin_threshold=None,
-        normalize=False
+        normalize=False,
+        chunk_score_threshold=0.9
     ):
         super(DSDM, self).__init__()
         self.address_size = address_size
         self.addresses = torch.tensor([]).to(device)
         self.bins = torch.tensor([]).to(device)
+        self.chunk_scores = torch.tensor([]).to(device)
 
         self.normalize = normalize
 
@@ -63,8 +65,20 @@ class DSDM(nn.Module):
         self.max_size_address_space = max_size_address_space
         self.remove_percentage = remove_percentage
         self.bin_threshold = bin_threshold
+        self.chunk_score_threshold = chunk_score_threshold
 
-    
+        # Set wiki article index.
+        self.wiki_articles = torch.tensor([]).to(device)
+
+    def add_wiki_article(self, article_id: int) -> None:
+        self.wiki_articles = torch.cat(
+                (
+                    self.wiki_articles,
+                    torch.tensor([article_id]).to(device)
+                )
+            )
+        return
+        
     def get_memory_type(self) -> str:
         return "normalized" if self.normalize == True else "unnormalized"
 
@@ -124,7 +138,7 @@ class DSDM(nn.Module):
                 return self.addresses[return_mask]  
 
     
-    def save(self, query_address):
+    def save(self, query_address, chunk_score=0):
         # The memory is instantiated with the first observation.
         query_address = query_address.to(device)
         
@@ -139,6 +153,12 @@ class DSDM(nn.Module):
                 (
                     self.bins,
                     torch.tensor([0]).to(device)
+                )
+            )
+            self.chunk_scores = torch.cat(
+                (
+                    self.chunk_scores,
+                    torch.tensor([chunk_score]).to(device)
                 )
             )
             self.n_expansions += 1  
@@ -174,6 +194,12 @@ class DSDM(nn.Module):
                     torch.tensor([0]).to(device)
                 )
             )
+            self.chunk_scores = torch.cat(
+                (
+                    self.chunk_scores,
+                    torch.tensor([chunk_score]).to(device)
+                )
+            )
             self.n_expansions += 1  
         else: # If the minimum distance is smaller or equal, update the memory addresses.
             # Apply the softmin function to the distance tensor the get the softmin weights.
@@ -195,25 +221,29 @@ class DSDM(nn.Module):
                     n_prune = len(self.addresses) - self.max_size_address_space
                 else:
                     n_prune = int(self.remove_percentage * len(self.addresses))
-                    
+
+                # Get bin index ascendingly sorted.
                 val, idx = torch.topk(
                     self.bins.view(1, -1),
-                    k=n_prune,
+                    k=self.addresses.shape[0],
                     largest=False
                 ) 
-
-                # Convert tensor to flattened numpy array.
-                idx = idx.cpu().detach().numpy().flatten()
+    
+                idx = idx.cpu().detach().numpy().flatten()   # Convert tensor to flattened numpy array.
+                idx = idx[~(self.chunk_scores >= self.chunk_score_threshold).cpu().detach().numpy().flatten()]  # Keep chunks with a high mean attention score.
+                idx = idx[:n_prune]
                 for i in idx:
                     keep_mask[i] = False
                 
             if self.prune_mode == "threshold":
-                keep_mask = self.bins.view(1, -1) >= self.bin_threshold
+                # TODO: False
+                keep_mask = self.bins.view(1, -1) >= self.bin_threshold 
 
         
         self.n_deletions += (~np.array([True, False, True])).astype(int).sum()
         # Prune memory space.
         self.addresses = self.addresses[keep_mask]  # Delete addresses.
         self.bins = self.bins[keep_mask]  # Delete bins.
+        self.chunk_scores = self.chunk_scores[keep_mask]  # Delete chunk scores.
             
         return

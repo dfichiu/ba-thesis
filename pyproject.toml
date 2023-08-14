@@ -26,6 +26,7 @@ apache-beam = "^2.49.0"
 mwparserfromhell = "^0.6.4"
 transformers = "^4.31.0"
 datasets = "^2.13.1"
+gensim = "^4.3.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
