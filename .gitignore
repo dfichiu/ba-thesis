@@ -6,3 +6,6 @@ __pycache__/
 
 .DS_Store
 src/.DS_Store
+
+./src/experiments/memories/
+./src/experiments/cleanups/

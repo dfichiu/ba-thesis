@@ -51,13 +51,27 @@ def initialize_parser():
     parser.add_argument("--ema_time_period", type=int, help="TODO")
     parser.add_argument("--learning_rate_update", type=float, help="TODO")
     parser.add_argument("--temperature", type=float, help="TODO")
-    parser.add_argument("--normalize", type=bool, help="TODO")
+    parser.add_argument("--normalize", action=argparse.BooleanOptionalAction, help="TODO")
     parser.add_argument("--chunk_sizes", help="TODO")
     parser.add_argument("--prune_mode", help="TODO")
     parser.add_argument("--max_size_address_space", type=int, help="TODO")
-    parser.add_argument("--chunk_score_threshold", type=float, help="TODO")
     parser.add_argument("--train_size", type=int, help="TODO")
     parser.add_argument("--attention_score_threshold", type=float, help="TODO")
+    
+    # Pruning settings
+    parser.add_argument("--pruning_frequency_type", help="TODO")
+    parser.add_argument("--pruning_frequency", type=int, help="TODO")
+    
+    parser.add_argument("--safeguard_bins", action=argparse.BooleanOptionalAction, help="TODO")
+    parser.add_argument("--bin_score_threshold_type", help="TODO")
+    parser.add_argument("--bin_score_threshold", help="TODO")
+    
+    parser.add_argument("--safeguard_chunks", action=argparse.BooleanOptionalAction, help="TODO")
+    parser.add_argument("--chunk_score_threshold", type=float, help="TODO")
+    
+    parser.add_argument("--n_sequences", type=int, help="TODO")
+    
+    parser.add_argument("--remove_duplicates", action=argparse.BooleanOptionalAction, help="TODO")
 
     return parser
     
@@ -68,11 +82,11 @@ def initialize_memory(args):
         # TODO
         pass
     else:
-        # Initialize new cleanup
-        cleanups = cleanup.Cleanup(args.address_size)
+        # Initialize new cleanup.
+        _cleanup = cleanup.Cleanup(args.address_size)
         
         # Initialize new memory.
-        memory =  DSDM.DSDM(
+        memory = DSDM.DSDM(
             address_size=args.address_size,
             ema_time_period=args.ema_time_period,
             learning_rate_update=args.learning_rate_update,
@@ -80,9 +94,13 @@ def initialize_memory(args):
             normalize=args.normalize,
             prune_mode=args.prune_mode,
             max_size_address_space=args.max_size_address_space,
+            safeguard_chunks=args.safeguard_chunks,
             chunk_score_threshold=args.chunk_score_threshold,
+            safeguard_bins=args.safeguard_bins,
+            bin_score_threshold_type=args.bin_score_threshold_type,
+            bin_score_threshold=args.bin_score_threshold,
         )
-        return cleanups, memory
+        return _cleanup, memory
     
     
 def remove_duplicates(memory):
@@ -100,9 +118,7 @@ def remove_duplicates(memory):
         # Remove similar addresses
         memory.addresses = memory.addresses[global_keep_mask]
         # Remove bins
-        memory.bins = memory.bins[global_keep_mask]
-        # Remove chunk scores
-        memory.chunk_scores = memory.chunk_scores[global_keep_mask]
+        memory.scores = memory.scores[global_keep_mask]
         
 
 def average_out_and_remove_rows(t: torch.tensor, averages_idx, remove_idx):
@@ -122,15 +138,19 @@ def preprocess_attention_scores(attention_scores, averages_idx, remove_idx):
 def train_memory(cleanup, memory, args):
     train_idx = np.random.randint(0, len(wiki_dataset), size=args.train_size)
     
-    pos = 0
+    n_documents = 0
+    n_sentences = 0
+    
     for i in tqdm(train_idx):
-        pos += 1
+        n_documents = (n_documents + 1) % args.pruning_frequency
         text = wiki_dataset[int(i)]['text']
         memory.add_wiki_article(int(i))
         
         sentences = preprocess.split_text_into_sentences(text)
         
         for sentence in sentences:
+            if args.pruning_frequency_type == "sentence":
+                n_sentences = (n_sentences + 1) % args.pruning_frequency
             inputs = tokenizer(sentence, return_tensors="pt")
             if inputs['input_ids'].shape[1] > MAXIMUM_SEQUENCE_LENGTH:
                 break
@@ -175,7 +195,7 @@ def train_memory(cleanup, memory, args):
             
                 head_scores[head_scores < args.attention_score_threshold] = 0
                 
-                G = nx.from_numpy_array(head_scores, create_using = nx.DiGraph())
+                G = nx.from_numpy_array(head_scores, create_using=nx.DiGraph())
             
                 n_tokens = len(labels)
                 means, sequences = sequence.construct_sequences(G, n_tokens)
@@ -186,19 +206,43 @@ def train_memory(cleanup, memory, args):
                     df['len'] = df['seq'].map(sum)
                     df['score'] = df['score'].astype('float64')
                     df = df.sort_values(by=['score', 'len'], ascending=[False, False]).reset_index(drop=True)
-                    top3_df = df.head(3)
+                    
+                    # Select sequences to be save to memory.
+                    if args.n_sequences is not None:
+                        filtered_df = df.head(args.n_sequences)
+                    elif args.chunk_score_threshold is not None:
+                        filtered_df = df[df['score'] >= args.chunk_score_threshold]
+                    else:
+                        filtered_df = df.head(3)
                 
-                    for i in range(len(top3_df)):
+                    # Save sequences to memory.
+                    for i in range(len(filtered_df)):
                         memory.save(
                             inference.generate_query(
                                 memory.address_size,
                                 cleanup,
-                                labels[top3_df['seq'][i].astype(bool)]
+                                labels[filtered_df['seq'][i].astype(bool)]
                             ),
-                            top3_df['score'][i]
+                            filtered_df['score'][i]
                         )
+                        
+            # Sentence-level pruning            
+            if (
+                args.prune_mode is not None
+                and args.pruning_frequency_type == "sentence"
+                and n_sentences % args.pruning_frequency == 0
+            ):
+                memory.prune()
+                
+        # Document-level pruning            
+        if (
+            args.prune_mode is not None
+            and args.pruning_frequency_type == "document"
+            and n_documents % args.pruning_frequency == 0
+        ):
             memory.prune()
-        if pos % 1000 == 0:
+        
+        if args.remove_duplicates and n_documents % 1000 == 0:
             remove_duplicates(memory)
             
     return

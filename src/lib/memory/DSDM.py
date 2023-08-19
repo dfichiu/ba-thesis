@@ -1,27 +1,13 @@
 """This file implements DSDM."""
-from IPython.display import display, Markdown as md
-import ipywidgets as widgets
-import itertools
-import math
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy
-import numpy as np
-import random
-
-import pandas as pd
-
-from sklearn.metrics import pairwise_distances
-
 import torch
-import torchhd as thd
-from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F 
 
-# Type checking
-from typing import List
 
+# Torch settings
+torch.set_grad_enabled(False)
+
+# Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -32,18 +18,20 @@ class DSDM(nn.Module):
         ema_time_period,
         learning_rate_update,
         temperature,
+        normalize=False,
         prune_mode=None,
         max_size_address_space=None,
         remove_percentage=None,
-        bin_threshold=None,
-        normalize=False,
-        chunk_score_threshold=0.9
+        safeguard_bins=False,
+        bin_score_threshold=0,
+        bin_score_threshold_type='static',
+        safeguard_chunks=False,
+        chunk_score_threshold=0
     ):
         super(DSDM, self).__init__()
         self.address_size = address_size
         self.addresses = torch.tensor([]).to(device)
-        self.bins = torch.tensor([]).to(device)
-        self.chunk_scores = torch.tensor([]).to(device)
+        self.scores = torch.tensor([]).to(device)  
 
         self.normalize = normalize
 
@@ -64,7 +52,12 @@ class DSDM(nn.Module):
         self.prune_mode = prune_mode
         self.max_size_address_space = max_size_address_space
         self.remove_percentage = remove_percentage
-        self.bin_threshold = bin_threshold
+        
+        self.safeguard_bins = safeguard_bins
+        self.bin_score_threshold_type = bin_score_threshold_type
+        self.bin_score_threshold = bin_score_threshold
+        
+        self.safeguard_chunks = safeguard_chunks
         self.chunk_score_threshold = chunk_score_threshold
 
         # Set wiki article index.
@@ -72,11 +65,11 @@ class DSDM(nn.Module):
 
     def add_wiki_article(self, article_id: int) -> None:
         self.wiki_articles = torch.cat(
-                (
-                    self.wiki_articles,
-                    torch.tensor([article_id]).to(device)
-                )
+            (
+                self.wiki_articles,
+                torch.tensor([article_id]).to(device)
             )
+        )
         return
         
     def get_memory_type(self) -> str:
@@ -98,67 +91,60 @@ class DSDM(nn.Module):
         k=None
     
     ):
-        with torch.no_grad():
-            query_address = query_address.to(device)
-            #retrieved_content = torch.tensor([]).to(device)
-            self.prune()
+        query_address = query_address.to(device)
+        # Prune before retrieval.
+        self.prune()
 
-            cos = torch.nn.CosineSimilarity()
-            # Calculate the cosine similarities.
-            if self.normalize: 
-                similarities = cos(self.addresses.sgn(), query_address.sgn())
-            else:
-                similarities = cos(self.addresses, query_address)
-            # Cosine distance tensor
-            distances = 1 - similarities
+        cos = torch.nn.CosineSimilarity()
+        # Calculate the cosine similarities.
+        if self.normalize: 
+            similarities = cos(self.addresses.sgn(), query_address.sgn())
+        else:
+            similarities = cos(self.addresses, query_address)
+        # Cosine distance tensor
+        distances = 1 - similarities
 
-            # Calculate the softmin weights.
-            softmin_weights = F.softmin(distances/self.temperature, dim=-1)
+        # Calculate the softmin weights.
+        softmin_weights = F.softmin(distances / self.temperature, dim=-1)
 
-            if retrieve_mode == "pooling":
-                # Weight the memory addresses with the softmin weights.
-                weighted_addresses = torch.matmul(softmin_weights, self.addresses.to(device)).view(-1)
-    
-                # Pool the weighted memory addresses to create the output and return it.
-                return torch.sum(weighted_addresses.view(1, -1), 0)
-            else:  # retrieve_mode == "top_k"
-                return_mask = [False] * len(self.addresses)
-                
-                val, idx = torch.topk(
-                    softmin_weights.view(1, -1),
-                    k=k,
-                    largest=True
-                )
+        if retrieve_mode == "pooling":
+            # Weight the memory addresses with the softmin weights.
+            weighted_addresses = torch.matmul(softmin_weights, self.addresses.to(device)).view(-1)
 
-                # Convert tensor to flattened numpy array.
-                idx = idx.cpu().detach().numpy().flatten()
-                for i in idx:
-                    return_mask[i] = True
-                
-                return self.addresses[return_mask]  
+            # Pool the weighted memory addresses to create the output and return it.
+            return torch.sum(weighted_addresses.view(1, -1), 0)
+        else:  # retrieve_mode == "top_k"
+            return_mask = [False] * len(self.addresses)
+
+            val, idx = torch.topk(
+                softmin_weights.view(1, -1),
+                k=k,
+                largest=True
+            )
+
+            # Convert tensor to flattened numpy array.
+            idx = idx.cpu().detach().numpy().flatten()
+            for i in idx:
+                return_mask[i] = True
+
+            return self.addresses[return_mask]  
 
     
     def save(self, query_address, chunk_score=0):
-        # The memory is instantiated with the first observation.
         query_address = query_address.to(device)
         
         if self.addresses.shape[0] == 0:
+            # The memory is instantiated with the first observation.
             self.addresses = torch.cat(
                 (
                     self.addresses,
                     query_address.view(1, -1)
                 )
             )
-            self.bins = torch.cat(
+            self.scores = torch.cat(
                 (
-                    self.bins,
-                    torch.tensor([0]).to(device)
-                )
-            )
-            self.chunk_scores = torch.cat(
-                (
-                    self.chunk_scores,
-                    torch.tensor([chunk_score]).to(device)
+                    self.scores,
+                    torch.tensor([chunk_score, 0]).view(1, -1).to(device)
                 )
             )
             self.n_expansions += 1  
@@ -188,62 +174,77 @@ class DSDM(nn.Module):
                     query_address.view(1, -1)
                 )
             )
-            self.bins = torch.cat(
+            self.scores = torch.cat(
                 (
-                    self.bins,
-                    torch.tensor([0]).to(device)
-                )
-            )
-            self.chunk_scores = torch.cat(
-                (
-                    self.chunk_scores,
-                    torch.tensor([chunk_score]).to(device)
+                    self.scores,
+                    torch.tensor([chunk_score, 0]).view(1, -1).to(device)
                 )
             )
             self.n_expansions += 1  
         else: # If the minimum distance is smaller or equal, update the memory addresses.
             # Apply the softmin function to the distance tensor the get the softmin weights.
-            softmin_weights = F.softmin(distances/self.temperature, dim=-1)
+            softmin_weights = F.softmin(distances / self.temperature, dim=-1)
             # Update the memory address space.
             self.addresses += self.learning_rate_update * torch.mul(softmin_weights.view(-1, 1), query_address - self.addresses)
-            self.bins += softmin_weights
+            self.scores[:, 1] += softmin_weights
             self.n_updates += 1
+            
+            if self.safeguard_bins and self.bin_score_threshold_type == "dynamic":
+                val, idx = torch.topk(
+                    self.scores[:, 1],
+                    k=10,
+                    largest=False,
+                )
+                self.bin_score_threshold += val[-1].item()
             
         return
 
     
     def prune(self):
-        keep_mask = [True] * len(self.addresses)  # Assume no pruning is needed.
-
         if self.prune_mode is not None: 
-            if (self.prune_mode == "fixed-size" or self.prune_mode == "remove-percentage") and (len(self.addresses) > self.max_size_address_space):
-                if self.prune_mode == "fixed-size":
-                    n_prune = len(self.addresses) - self.max_size_address_space
-                else:
-                    n_prune = int(self.remove_percentage * len(self.addresses))
-
-                # Get bin index ascendingly sorted.
-                val, idx = torch.topk(
-                    self.bins.view(1, -1),
-                    k=self.addresses.shape[0],
-                    largest=False
-                ) 
-    
-                idx = idx.cpu().detach().numpy().flatten()   # Convert tensor to flattened numpy array.
-                idx = idx[~(self.chunk_scores >= self.chunk_score_threshold).cpu().detach().numpy().flatten()]  # Keep chunks with a high mean attention score.
-                idx = idx[:n_prune]
-                for i in idx:
-                    keep_mask[i] = False
+            if (
+                (
+                  self.prune_mode == "fixed-size"
+                  and (len(self.addresses) > self.max_size_address_space)
+                )
+                or self.prune_mode == "remove-percentage"
+            ):
+                # Bin score ascending sorting
+                inner_sorting = torch.argsort(self.scores[:, 1])
+                # Chunk score ascending sorting
+                outer_sorting = torch.argsort(
+                    self.scores[inner_sorting][:, 0], stable=True
+                )
                 
-            if self.prune_mode == "threshold":
-                # TODO: False
-                keep_mask = self.bins.view(1, -1) >= self.bin_threshold 
+                # Sort scores and addresses.
+                self.scores = self.scores[inner_sorting][outer_sorting]
+                self.addresses = self.addresses[inner_sorting][outer_sorting]
+                
+                if self.prune_mode == "fixed-size":
+                    n_keep = self.max_size_address_space
+                else:
+                    n_keep = int((1 - self.remove_percentage) * len(self.addresses))
 
-        
-        self.n_deletions += (~np.array([True, False, True])).astype(int).sum()
-        # Prune memory space.
-        self.addresses = self.addresses[keep_mask]  # Delete addresses.
-        self.bins = self.bins[keep_mask]  # Delete bins.
-        self.chunk_scores = self.chunk_scores[keep_mask]  # Delete chunk scores.
-            
+                if self.safeguard_bins or self.safeguard_chunks:  # Bin or chunk safeguarding
+                    if self.safeguard_bins and self.safeguard_chunks: 
+                        keep_mask = (
+                            (self.scores[:, 1] <= self.bin_score_threshold)
+                            | (self.scores[:, 0] >= self.chunk_score_threshold)
+                        )
+                    elif self.safeguard_bins:
+                        keep_mask = self.scores[:, 1] <= self.bin_score_threshold
+
+                    else:
+                        keep_mask = self.scores[:, 0] >= self.chunk_score_threshold
+                        
+                    keep_mask[-n_keep:] = True
+                    
+                    self.scores = self.scores[keep_mask]
+                    self.addresses = self.addresses[keep_mask]
+                    self.n_deletions += torch.sum(keep_mask).item()
+                else:  # No bin or chunk safeguarding
+                    self.scores = self.scores[inner_sorting][outer_sorting][-n_keep:]
+                    self.addresses = self.addresses[inner_sorting][outer_sorting][-n_keep:]
+                    self.n_deletions += len(self.addresses) - n_keep 
+                    
         return
