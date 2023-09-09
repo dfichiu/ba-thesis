@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F 
 
 
-# Torch settings
+# Torch settings: Disable gradient.
 torch.set_grad_enabled(False)
 
 # Set device
@@ -26,7 +26,8 @@ class DSDM(nn.Module):
         bin_score_threshold=0,
         bin_score_threshold_type='static',
         safeguard_chunks=False,
-        chunk_score_threshold=0
+        chunk_score_threshold=0,
+        chunk_size=None,
     ):
         super(DSDM, self).__init__()
         self.address_size = address_size
@@ -42,11 +43,21 @@ class DSDM(nn.Module):
         self.learning_rate_update = learning_rate_update
 
         self.temperature = temperature
+        
+        
+        # Deleted addresses 
+        self.deleted_addresses = torch.tensor([]).to(device)
+        self.deleted_scores = torch.tensor([]).to(device)  
+        
 
         # Set statistics counters.
         self.n_updates = 0
         self.n_expansions = 0
         self.n_deletions = 0
+        
+        # Sliding window n-gram method variables
+        self.removed_duplicates = 0
+        self.chunk_size = chunk_size
 
         # Set pruning hyperparameters.
         self.prune_mode = prune_mode
@@ -164,6 +175,8 @@ class DSDM(nn.Module):
         
         # Calculate EMA for current chunk.
         self.ema += self.ema_temperature * (min_distance - self.ema)
+        #print(f'Distance: {min_distance}')
+        #print(f'EMA: {self.ema}')
         
         # Check if the minimum distance is bigger than the adaptive threshold.
         if min_distance > self.ema: # If the minimum distance is bigger, create a new address.
@@ -180,12 +193,14 @@ class DSDM(nn.Module):
                     torch.tensor([chunk_score, 0]).view(1, -1).to(device)
                 )
             )
+            #print(f"Address index: {self.n_expansions}")
             self.n_expansions += 1  
         else: # If the minimum distance is smaller or equal, update the memory addresses.
             # Apply the softmin function to the distance tensor the get the softmin weights.
             softmin_weights = F.softmin(distances / self.temperature, dim=-1)
             # Update the memory address space.
             self.addresses += self.learning_rate_update * torch.mul(softmin_weights.view(-1, 1), query_address - self.addresses)
+            #print(self.addresses[len(self.addresses) - 1])
             self.scores[:, 1] += softmin_weights
             self.n_updates += 1
             
@@ -239,12 +254,48 @@ class DSDM(nn.Module):
                         
                     keep_mask[-n_keep:] = True
                     
+                    
+                    # Update deleted addresses and scores.
+                    self.deleted_addresses = torch.cat(
+                        (
+                            self.deleted_addresses,
+                            self.addresses[~keep_mask],
+                        )
+                    )
+                    self.deleted_scores = torch.cat(
+                        (
+                             self.deleted_scores,
+                            self.scores[~keep_mask],
+                        )
+                    )
+                    
+                    
+                    # Update number of deleted addresses.
+                    self.n_deletions += torch.sum(~keep_mask).item()
+                    
+                    # Update memory.
                     self.scores = self.scores[keep_mask]
                     self.addresses = self.addresses[keep_mask]
-                    self.n_deletions += torch.sum(keep_mask).item()
                 else:  # No bin or chunk safeguarding
-                    self.scores = self.scores[inner_sorting][outer_sorting][-n_keep:]
-                    self.addresses = self.addresses[inner_sorting][outer_sorting][-n_keep:]
+                    # Update number of deleted addresses.
                     self.n_deletions += len(self.addresses) - n_keep 
+                    
+                    # Update deleted addresses and scores.
+                    self.deleted_addresses = torch.cat(
+                        (
+                            self.deleted_addresses,
+                            self.addresses[:-n_keep],
+                        )
+                    )
+                    self.deleted_scores = torch.cat(
+                        (
+                             self.deleted_scores,
+                            self.scores[:-n_keep],
+                        )
+                    )
+                    
+                    # Update memory.
+                    self.scores = self.scores[-n_keep:]
+                    self.addresses = self.addresses[-n_keep:]
                     
         return

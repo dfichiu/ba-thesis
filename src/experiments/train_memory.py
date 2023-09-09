@@ -27,6 +27,9 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
 
 
+# Torch settings: Disable gradient.
+torch.set_grad_enabled(False)
+
 # Set device.
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -87,11 +90,11 @@ def initialize_memory(args):
         
         # Initialize new memory.
         memory = DSDM.DSDM(
-            address_size=args.address_size,
-            ema_time_period=args.ema_time_period,
-            learning_rate_update=args.learning_rate_update,
+            address_size=1000#args.address_size,
+            ema_time_period=100000#args.ema_time_period,
+            learning_rate_update=0#args.learning_rate_update,
             temperature=args.temperature,
-            normalize=args.normalize,
+            normalize=False#args.normalize,
             prune_mode=args.prune_mode,
             max_size_address_space=args.max_size_address_space,
             safeguard_chunks=args.safeguard_chunks,
@@ -185,11 +188,11 @@ def train_memory(cleanup, memory, args):
             layer = 0
             
             for head in range(12):
-                head_scores_raw_tensor = attention_matrix[layer][0][head].detach().clone()
+                head_scores_raw_tensor = attention_matrix[layer][0][head].clone()#.detach().clone()
                 
                 head_scores_raw_tensor = preprocess_attention_scores(head_scores_raw_tensor, averages_idx, remove_idx)
                 
-                head_scores_raw = head_scores_raw_tensor.cpu().detach().numpy()
+                head_scores_raw = head_scores_raw_tensor.numpy()#.cpu().detach().numpy()
                 
                 head_scores = head_scores_raw[1:(len(head_scores_raw) - 1), 1:(len(head_scores_raw) - 1)].copy()
             
@@ -246,6 +249,7 @@ def train_memory(cleanup, memory, args):
             remove_duplicates(memory)
             
     return
+
 
 def save_memory(cleanup, memory):
     now = datetime.now()

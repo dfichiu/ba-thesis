@@ -24,14 +24,15 @@ def remove_punctuation(sentences):
 def remove_stopwords(sentences_tokens):
     return [[token for token in sentence_tokens if token not in stopwords.words('english')] for sentence_tokens in sentences_tokens]
 
-def add_whitespace_before_punctuation(text):
-    return [s.translate(str.maketrans({key: " {0}".format(key) for key in string.punctuation})) for s in text]
+def add_whitespace_before_punctuation(sentences):
+    return [s.translate(str.maketrans({key: " {0}".format(key) for key in string.punctuation})) for s in sentences]
 
 def tokenize_sentence(sentences):
     return [nltk.word_tokenize(s) for s in sentences]
 
 pipeline = Pipeline([
     ('tokenize-text-into-sentences', FunctionTransformer(split_text_into_sentences)),
+    ('add-whitespace-before-punctuation', FunctionTransformer(add_whitespace_before_punctuation)),
     ('lowercase', FunctionTransformer(lowercase)),
     ('remove-punctuation', FunctionTransformer(remove_punctuation)),
     ('tokenize-sentence', FunctionTransformer(tokenize_sentence)),

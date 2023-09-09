@@ -73,14 +73,17 @@ def generate_chunk_representations_and_save_them_to_memory(
                     print("Not enough tokens left.")
                 break 
             HC_representation = thd.MAPTensor.empty(1, dim)[0].to(device)
+            #_ = " "
 
             # Construct HC representation.
             for j in range(no_tokens):
                 if output:
                     print(tokens[i + j])
                 HC_representation += cleanup.get_item(tokens[i + j])
+                #_ += (" " + tokens[i + j])
 
             # Save the chunk HC representation to memory.
+            #print(f"Chunk: {_}")
             memory.save(HC_representation)
 
     return
