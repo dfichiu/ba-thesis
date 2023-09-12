@@ -75,6 +75,8 @@ def initialize_parser():
     parser.add_argument("--n_sequences", type=int, help="TODO")
     
     parser.add_argument("--remove_duplicates", action=argparse.BooleanOptionalAction, help="TODO")
+    
+    parser.add_argument("--remove_stopwords", action=argparse.BooleanOptionalAction, help="TODO")
 
     return parser
     
@@ -90,12 +92,14 @@ def initialize_memory(args):
         
         # Initialize new memory.
         memory = DSDM.DSDM(
-            address_size=1000#args.address_size,
-            ema_time_period=100000#args.ema_time_period,
-            learning_rate_update=0#args.learning_rate_update,
+            address_size=1000, #args.address_size,
+            ema_time_period=100000, #args.ema_time_period,
+            learning_rate_update=0, #args.learning_rate_update,
             temperature=args.temperature,
-            normalize=False#args.normalize,
+            normalize=False, #args.normalize,
             prune_mode=args.prune_mode,
+            pruning_frequency_type=args.pruning_frequency_type,
+            pruning_frequency=args.pruning_frequency,
             max_size_address_space=args.max_size_address_space,
             safeguard_chunks=args.safeguard_chunks,
             chunk_score_threshold=args.chunk_score_threshold,
@@ -139,13 +143,17 @@ def preprocess_attention_scores(attention_scores, averages_idx, remove_idx):
     
 
 def train_memory(cleanup, memory, args):
-    train_idx = np.random.randint(0, len(wiki_dataset), size=args.train_size)
+    train_idx = np.random.randint(0, len(wiki_dataset) - 1000, size=1000000)
+    train_idx = train_idx[:args.train_size]
+    train_idx = np.append(np.array([6458629, 6458633, 6458645, 6458648, 6458659, 6458664, 6458665,
+       6458667, 6458668, 6458573]), train_idx)
     
     n_documents = 0
     n_sentences = 0
     
     for i in tqdm(train_idx):
-        n_documents = (n_documents + 1) % args.pruning_frequency
+        if args.pruning_frequency_type == "document":
+            n_documents = (n_documents + 1) % args.pruning_frequency
         text = wiki_dataset[int(i)]['text']
         memory.add_wiki_article(int(i))
         
@@ -180,54 +188,57 @@ def train_memory(cleanup, memory, args):
             
             hashtag_idx = np.array([label.startswith("#") for label in labels])
             stopwords_idx = np.array([label in stopwords.words('english') for label in labels])
+            other_idx = np.array([(len(label) == 1 and (ord(label) == 8211 or ord(label) == 65288)) for label in labels])
             punctuation_idx = np.array([label in string.punctuation for label in labels])
-            remove_idx = hashtag_idx | punctuation_idx | stopwords_idx
+            remove_idx = hashtag_idx | punctuation_idx | other_idx  
+            if args.remove_stopwords:
+                remove_idx |= stopwords_idx
             labels = np.array(labels)[~remove_idx]
             labels = labels[1:(len(labels) - 1)]
     
-            layer = 0
-            
-            for head in range(12):
-                head_scores_raw_tensor = attention_matrix[layer][0][head].clone()#.detach().clone()
-                
-                head_scores_raw_tensor = preprocess_attention_scores(head_scores_raw_tensor, averages_idx, remove_idx)
-                
-                head_scores_raw = head_scores_raw_tensor.numpy()#.cpu().detach().numpy()
-                
-                head_scores = head_scores_raw[1:(len(head_scores_raw) - 1), 1:(len(head_scores_raw) - 1)].copy()
-            
-                head_scores[head_scores < args.attention_score_threshold] = 0
-                
-                G = nx.from_numpy_array(head_scores, create_using=nx.DiGraph())
-            
-                n_tokens = len(labels)
-                means, sequences = sequence.construct_sequences(G, n_tokens)
-                    
-                df = pd.DataFrame(data=[sequences, means]).T.rename(columns={0: 'seq',  1: 'score'})
-                
-                if len(df) > 0:
-                    df['len'] = df['seq'].map(sum)
-                    df['score'] = df['score'].astype('float64')
-                    df = df.sort_values(by=['score', 'len'], ascending=[False, False]).reset_index(drop=True)
-                    
-                    # Select sequences to be save to memory.
-                    if args.n_sequences is not None:
-                        filtered_df = df.head(args.n_sequences)
-                    elif args.chunk_score_threshold is not None:
-                        filtered_df = df[df['score'] >= args.chunk_score_threshold]
-                    else:
-                        filtered_df = df.head(3)
-                
-                    # Save sequences to memory.
-                    for i in range(len(filtered_df)):
-                        memory.save(
-                            inference.generate_query(
-                                memory.address_size,
-                                cleanup,
-                                labels[filtered_df['seq'][i].astype(bool)]
-                            ),
-                            filtered_df['score'][i]
-                        )
+            #layer = 0
+            for layer in range(12):
+                for head in range(12):
+                    head_scores_raw_tensor = attention_matrix[layer][0][head].clone()#.detach().clone()
+
+                    head_scores_raw_tensor = preprocess_attention_scores(head_scores_raw_tensor, averages_idx, remove_idx)
+
+                    head_scores_raw = head_scores_raw_tensor.numpy()#.cpu().detach().numpy()
+
+                    head_scores = head_scores_raw[1:(len(head_scores_raw) - 1), 1:(len(head_scores_raw) - 1)].copy()
+
+                    head_scores[head_scores < args.attention_score_threshold] = 0
+
+                    G = nx.from_numpy_array(head_scores, create_using=nx.DiGraph())
+
+                    n_tokens = len(labels)
+                    means, sequences = sequence.construct_sequences(G, n_tokens)
+
+                    df = pd.DataFrame(data=[sequences, means]).T.rename(columns={0: 'seq',  1: 'score'})
+
+                    if len(df) > 0:
+                        df['len'] = df['seq'].map(sum)
+                        df['score'] = df['score'].astype('float64')
+                        df = df.sort_values(by=['len', 'score'], ascending=[False, False]).reset_index(drop=True)
+
+                        # Select sequences to be save to memory.
+                        if args.n_sequences is not None:
+                            filtered_df = df.head(args.n_sequences)
+                        elif args.chunk_score_threshold is not None:
+                            filtered_df = df[df['score'] >= args.chunk_score_threshold]
+                        else:
+                            filtered_df = df.head(1)
+
+                        # Save sequences to memory.
+                        for i in range(len(filtered_df)):
+                            memory.save(
+                                inference.generate_query(
+                                    memory.address_size,
+                                    cleanup,
+                                    labels[filtered_df['seq'][i].astype(bool)]
+                                ),
+                                filtered_df['score'][i]
+                            )
                         
             # Sentence-level pruning            
             if (
@@ -252,16 +263,16 @@ def train_memory(cleanup, memory, args):
 
 
 def save_memory(cleanup, memory):
-    now = datetime.now()
+    now = str(datetime.now()).replace(':', "-").replace('.', '-')
     
-    if not os.path.exists('memories'):
-        os.makedirs('memories')
-    if not os.path.exists('cleanups'):
-        os.makedirs('cleanups')
+    if not os.path.exists('memories/method2'):
+        os.makedirs('memories/method2')
+    if not os.path.exists('cleanups/method2'):
+        os.makedirs('cleanups/method2')
         
-    with open(f'memories/memory_{now}.pkl', 'wb') as outp:
+    with open(f'memories/method2/memory_{now}.pkl', 'wb') as outp:
         pickle.dump(memory, outp, pickle.HIGHEST_PROTOCOL)
-    with open(f'cleanups/cleanup_{now}.pkl', 'wb') as outp:
+    with open(f'cleanups/method2/cleanup_{now}.pkl', 'wb') as outp:
         pickle.dump(cleanup, outp, pickle.HIGHEST_PROTOCOL)
         
     return

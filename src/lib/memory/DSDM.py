@@ -20,6 +20,8 @@ class DSDM(nn.Module):
         temperature,
         normalize=False,
         prune_mode=None,
+        pruning_frequency_type=None,
+        pruning_frequency=None,
         max_size_address_space=None,
         remove_percentage=None,
         safeguard_bins=False,
@@ -64,6 +66,9 @@ class DSDM(nn.Module):
         self.max_size_address_space = max_size_address_space
         self.remove_percentage = remove_percentage
         
+        self.pruning_frequency_type = pruning_frequency_type
+        self.pruning_frequency = pruning_frequency
+        
         self.safeguard_bins = safeguard_bins
         self.bin_score_threshold_type = bin_score_threshold_type
         self.bin_score_threshold = bin_score_threshold
@@ -74,6 +79,7 @@ class DSDM(nn.Module):
         # Set wiki article index.
         self.wiki_articles = torch.tensor([]).to(device)
 
+        
     def add_wiki_article(self, article_id: int) -> None:
         self.wiki_articles = torch.cat(
             (
@@ -82,6 +88,7 @@ class DSDM(nn.Module):
             )
         )
         return
+        
         
     def get_memory_type(self) -> str:
         return "normalized" if self.normalize == True else "unnormalized"
@@ -98,13 +105,13 @@ class DSDM(nn.Module):
     def retrieve(
         self,
         query_address,
-        retrieve_mode="pooling",
+        retrieve_mode='pooling',
         k=None
     
     ):
         query_address = query_address.to(device)
         # Prune before retrieval.
-        self.prune()
+        #self.prune()
 
         cos = torch.nn.CosineSimilarity()
         # Calculate the cosine similarities.
@@ -125,21 +132,19 @@ class DSDM(nn.Module):
             # Pool the weighted memory addresses to create the output and return it.
             return torch.sum(weighted_addresses.view(1, -1), 0)
         else:  # retrieve_mode == "top_k"
-            return_mask = [False] * len(self.addresses)
-
+            
+            k = k if k <= len(self.addresses) else len(self.addresses)
+            
+            # Similar and present concepts
             val, idx = torch.topk(
-                softmin_weights.view(1, -1),
+                similarities.view(1, -1),
                 k=k,
                 largest=True
             )
 
-            # Convert tensor to flattened numpy array.
-            idx = idx.cpu().detach().numpy().flatten()
-            for i in idx:
-                return_mask[i] = True
+            return self.addresses[idx[0]]
 
-            return self.addresses[return_mask]  
-
+        
     
     def save(self, query_address, chunk_score=0):
         query_address = query_address.to(device)
@@ -175,7 +180,7 @@ class DSDM(nn.Module):
         
         # Calculate EMA for current chunk.
         self.ema += self.ema_temperature * (min_distance - self.ema)
-        #print(f'Distance: {min_distance}')
+        #print(f'Min. distance: {min_distance}')
         #print(f'EMA: {self.ema}')
         
         # Check if the minimum distance is bigger than the adaptive threshold.

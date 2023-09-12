@@ -8,6 +8,11 @@ from lib.utils import cleanup, preprocess, utils
 import math
 import matplotlib
 import matplotlib.pyplot as plt
+
+import nltk
+nltk.download('stopwords')
+from nltk.corpus import stopwords
+
 import numpy
 import numpy as np
 import random
@@ -16,14 +21,20 @@ import pandas as pd
 import pathlib
 
 import seaborn as sns
+import string
 
 from sklearn.metrics import pairwise_distances
+
+from transformers import AutoTokenizer, AutoModel
 
 import torch
 import torchhd as thd
 from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F 
+
+# Torch settings: Disable gradient.
+torch.set_grad_enabled(False)
 
 # Type checking
 import typing
@@ -68,7 +79,7 @@ def get_similarities_to_atomic_set(
         sims_df = pd.DataFrame(
             data={
                 'token': np.array(list(cleanup.index))[idx.cpu().detach().numpy().flatten()],
-                'similarity': val.cpu().detach().numpy().flatten()
+                'similarity': np.round(val.cpu().detach().numpy().flatten(), 2)
             }
         )
         return sims_df
@@ -145,6 +156,37 @@ def display_and_get_memory_addresses(
     return concepts_df
 
 
+
+def bert_preprocessing(sentence):
+    model_name = "bert-base-uncased"  # Has 12 layers
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    encoding = tokenizer.encode(sentence)
+    labels = tokenizer.convert_ids_to_tokens(encoding)
+
+    i = 0
+    averages_idx = []
+    while i < len(labels) - 1:
+        j = i + 1
+        average_idx = []
+        while labels[j].startswith('#'):
+            average_idx.append(j)
+            labels[i] += labels[j].replace('#', '')
+            j += 1
+        if average_idx != []:
+            average_idx.append(i)
+            averages_idx.append(average_idx)
+        i = j
+
+    hashtag_idx = np.array([label.startswith("#") for label in labels])
+    stopwords_idx = np.array([label in stopwords.words('english') for label in labels])
+    punctuation_idx = np.array([label in string.punctuation for label in labels])
+    dash_idx = np.array([(len(label) == 1 and ord(label) == 8211) for label in labels])
+    remove_idx = hashtag_idx | punctuation_idx | dash_idx #| stopwords_idx
+    labels = np.array(labels)[~remove_idx]
+    return labels[1:(len(labels) - 1)]
+
+
 def infer(
     dim: int,
     cleanup: cleanup.Cleanup,
@@ -158,8 +200,9 @@ def infer(
     retrieved_contents = []
         
     for s in inference_sentences:
-        tokens_list = preprocess.preprocess_text(s)[0] if isinstance(s, str) else s
-
+        #tokens_list = preprocess.preprocess_text(s)[0] if isinstance(s, str) else s
+        tokens_list = bert_preprocessing(s)
+        
         retrieved_content = memory.retrieve(
             query_address=generate_query(
                 dim,
