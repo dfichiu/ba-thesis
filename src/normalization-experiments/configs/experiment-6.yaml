@@ -1,0 +1,21 @@
+config: 
+  experiment_title: " 'Experiment 6' "
+  experiment_type: "comparison"
+  dim: 1000
+  initial_training:
+   data_path: "data/experiment_5/initial_training_data.txt"
+   chunk_sizes: [6]
+   epochs: [1]
+  training: 
+   data_path: "data/experiment_5/data.txt"
+   chunk_sizes: [1]
+   epochs: [1]
+  inference:
+   sentences: ["To this reputation for encouraging new writers The Black Cat added a reputation for originality.", "Cassino had continued the contests with large cash prizes that had been inaugurated by Umbstaetter.", "Dolly Johnson died sometime after July 1887."]
+   tracked_tokens: ["cat"]
+  DSDM:
+    ema_time_period: 5000
+    learning_rate_update: 0.4    
+    temperature: 0.05
+    normalize: True
+   

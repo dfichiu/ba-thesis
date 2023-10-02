@@ -3,11 +3,11 @@ config:
   experiment_type: "comparison"
   dim: 1000
   initial_training:
-   data_path: "../data/experiment_5/initial_training_data.txt"
+   data_path: "data/experiment_5/initial_training_data.txt"
    chunk_sizes: [6]
    epochs: [1]
   training: 
-   data_path: "../data/experiment_5/data.txt"
+   data_path: "data/experiment_5/data.txt"
    chunk_sizes: [1]
    epochs: [1]
   inference:
