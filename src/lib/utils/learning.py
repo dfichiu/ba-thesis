@@ -1,3 +1,4 @@
+"""This file implements functions used during training."""
 from IPython.display import display, HTML, Markdown as md
 import itertools
 
@@ -32,6 +33,12 @@ def generate_atomic_HVs_from_tokens_and_add_them_to_cleanup(
     cleanup: cleanup.Cleanup,
     tokens: typing.List[str]
 ) -> None:
+    """
+    Generates atomic hypervectors for a list of tokens.
+    
+    Given a list of tokens, generates atomic hypervectors for the tokens.
+    The actual generation happens in the 'add' method of the Cleanup class.
+    """
     for token in tokens:
         cleanup.add(token)
     
@@ -47,14 +54,25 @@ def generate_chunk_representations_and_save_them_to_memory(
     output: bool = False
 ) -> None:
     """
+    Generates superpositions of sequential n-grams and saves them to memory from a list of tokens.
     
+    The function is used in the context of the sliding window n-gram method to
+    generate sequential n-grams of a certain size from a sentence, encode them
+    into hyperdimnesional superpositions, and save them to memory.
+    
+    Args:
+        dim: Dimension of the hypervectors.
+        memory: DSDM object where the superpositions are saved.
+        tokens: List of tokens.
+        chunk_sizes: List of n-gram dimensions.
+        output: If True, print output for debugging.
     """
     # "n" represents the no. of tokens in the sentence, which is also the max. no. of tokens 
     # that can be grouped to form a chunk.
     n = len(tokens)
     chunk_sizes = np.array(chunk_sizes, dtype=int)
 
-    # Generate all possible chunks.
+    # If no n-gram dimension is provided, generate all possible n-grams.
     if len(chunk_sizes) == 0:
         chunk_sizes = np.arange(1, n + 1)
     else:
@@ -100,6 +118,10 @@ def online_learning_with_inference(
     tracked_tokens=None,    
 ) -> typing.Union[tuple[pd.DataFrame, pd.DataFrame], None]:
     """
+    Train memory and perform inference.
+    
+    The function was used in initial normalization experiments.
+    (See src/normalization-experiments.)
     """
     # Load data.
     text = utils.load_text(data_path)

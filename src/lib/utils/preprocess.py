@@ -1,3 +1,4 @@
+"""This file implements text preprocessing functions."""
 import nltk
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -40,8 +41,7 @@ pipeline = Pipeline([
 ])
 
 def preprocess_text(text: str) -> List[str]:
-    """
-    """
+    """Apply preprocessing pipeline to a piece of text."""
     global pipeline
     pipeline.fit(text)
 

@@ -1,5 +1,5 @@
+"""This file implements the config for the initial experiments."""
 import yaml
-
 
 class InferenceConfig:
     def __init__(
@@ -116,9 +116,6 @@ class Config:
         )
     
     def _check_experiment_parameters(self):
-        """
-        
-        """
         pass
 
     @staticmethod

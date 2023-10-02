@@ -1,3 +1,4 @@
+"""This file contains functions that style the output."""
 from IPython.display import display, HTML, Markdown as md
 import ipywidgets as widgets
 import itertools
@@ -31,7 +32,11 @@ def column_output(
     tables: dict,
     horizontal_output: bool = False
 ) -> None:
-    """ """
+    """ 
+    Uses ipywidgets to structure output.
+    
+    Used in initial normalization experiments. (See src/normalization-experiments.)
+    """
     if horizontal_output:
         outs = [widgets.Output() for _ in range(len(memories))]
 
@@ -49,6 +54,11 @@ def column_output(
     return
 
 def display_toc() -> None:
+    """
+    Displays table of contents for.
+    
+    Used in initial normalization experiemnts. (See src/normalization-experiments.)
+    """
     display(md("## [Initial training](#Initial-training)"))
     display(md("### [   Extracted concepts](#initial-training-extracted-concepts)"))
     display(md("### [   Tracked tokens similarities](#initial-training-tracked-tokens-similarities)"))
@@ -60,8 +70,10 @@ def display_toc() -> None:
     display(md("### [   Memory state](#training-memory-state)"))
     
 
-
 def fix_seed(seed: int = 42) -> None:
+    """
+    Sets seeds.
+    """
     display(md(f"Using seed: {seed}"))
 
     torch.manual_seed(seed)
@@ -72,15 +84,14 @@ def fix_seed(seed: int = 42) -> None:
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     
-def load_text(path:str) -> str:
-    """Load text from file path."""
+def load_text(path : str) -> str:
+    """Loads text from file path."""
     file = open(path)
     return file.read()
 
 
 def compute_distances_gpu(X, Y):
-    """Compute Euclidean distance."""
+    """Computes Euclidean distance."""
     return torch.sqrt(-2 * torch.mm(X,Y.T) +
                     torch.sum(torch.pow(Y, 2),dim=1) +
                     torch.sum(torch.pow(X, 2),dim=1).view(-1,1))
-

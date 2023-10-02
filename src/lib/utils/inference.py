@@ -1,3 +1,4 @@
+"""This file implements functions used during inference."""
 from IPython.display import display, HTML, Markdown as md
 import ipywidgets as widgets
 import itertools
@@ -39,6 +40,7 @@ torch.set_grad_enabled(False)
 # Type checking
 import typing
 
+# Set device.
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -47,42 +49,66 @@ def generate_query(
     cleanup: cleanup.Cleanup,
     tokens: typing.List[str]
 ) -> torch.Tensor:
-    
+    """
+    Computers and returns the superposition of a list of tokens.
+    """
     n = len(tokens)
+    # Empty hypvervector used to sum up the token hypervectors.
     hc_representation = thd.MAPTensor.empty(1, dim).to(device)
 
     # Iterate through all tokens.
     for i in range(n):
         # The token hasn't been encountered before.
         if cleanup.get_item(tokens[i]) == None:
+            # Add the new token to the codebook.
             cleanup.add(tokens[i])
+        # Add token-associated hypervector to superposition.
         hc_representation += cleanup.get_item(tokens[i])
 
     return hc_representation
 
 
 def get_similarities_to_atomic_set(
-    content: torch.tensor,
+    content: torch.Tensor,
     cleanup: cleanup.Cleanup,
     k: int = 10
 ) -> pd.DataFrame:
-        atomic_similarities = F.cosine_similarity(
-            cleanup.items,
-            content
-        )
-        val, idx = torch.topk(
-                    atomic_similarities.view(1, -1),
-                    k=k,
-                    largest=True
-        )
-        
-        sims_df = pd.DataFrame(
-            data={
-                'token': np.array(list(cleanup.index))[idx.cpu().detach().numpy().flatten()],
-                'similarity': np.round(val.cpu().detach().numpy().flatten(), 2)
-            }
-        )
-        return sims_df
+    """
+    Recovers atomic hypervectors present in a superposition.
+    
+    Returns a dataframe consisting of the tokens associated
+    with the atomic hypervectors and the cosine similarities between
+    the superposition and the atomic hypervectors. The dataframe is sorted
+    in descending order by the cosine similarity and only the top k 
+    rows are returned.
+    
+    Args:
+        content: Tensor representing superposition.
+        cleanup: Codebook containing the atomic set information.
+        k: Number of returned atomic hypervectors.
+    """
+    # Compute cosine similarities between superpoisition and atomic set.
+    # Note: By storing the atomic set in a tensor,
+    # the similarities can be computed using matrix multiplication
+    # instead of iteratively.
+    atomic_similarities = F.cosine_similarity(
+        cleanup.items,
+        content
+    )
+    # Get the k hypervectors with the highest cosine similarity.
+    val, idx = torch.topk(
+        atomic_similarities.view(1, -1),
+        k=k,
+        largest=True
+    )
+    # Construct dataframe.
+    sims_df = pd.DataFrame(
+        data={
+            'token': np.array(list(cleanup.index))[idx.cpu().detach().numpy().flatten()],
+            'similarity': np.round(val.cpu().detach().numpy().flatten(), 2)
+        }
+    )
+    return sims_df
 
 
 def get_most_similar_HVs(
@@ -90,8 +116,23 @@ def get_most_similar_HVs(
     delta_threshold: float = 0.15
 ) -> str:
     """
+    Joins the tokens with the highest cosine similarity.
+    
+    It was used in the initial normalization experiments. 
+    (See src/normalization-experiments.)
+    The function was used in the context of the sliding window
+    n-gram method, where the similarities changed due to
+    changes to the weights of the superpositions, to
+    extract the concept an address represented. This is why
+    the string is constructed from tokens between which the delta
+    in similarity is lower than or equal to a threshold.
+    
+    Args:
+        sims_df: DataFrame consisting of tokens and cosine similarities.
+        delta_threshold: Threshold between consecutive similarities.
     """
-    # Sort values: This is needed since similarity_next makes sense only in the context of a sort df.
+    
+    # Sort values: This is needed since similarity_next makes sense only in the context of a sorted df.
     df = sims_df.sort_values('similarity', ascending=False).reset_index(drop=True).copy()
     # Add column with the previous token's similarity.
     df['previous_token_similarity'] = df['similarity'].shift(1).values
@@ -110,7 +151,6 @@ def get_most_similar_HVs(
 
     # Subdataframe with only the most similar tokens.
     most_similar_tokens_df = df.head(idx_cut_in)
-   
     
     # Get concept as a string.
     concept = most_similar_tokens_df['token'].values
@@ -127,6 +167,12 @@ def display_and_get_memory_addresses(
     k: int = 10,
     display_addresses: bool = False,
 ):
+    """
+    Displays the memory address space.
+    
+    It was used in the initial normalization experiments. 
+    (See src/normalization-experiments.)
+    """
     display(md(f"Number of addresses: **{len(memory.addresses)}**"))
 
     concepts_df = pd.DataFrame(columns=['memory_address', 'memory_concept'])
@@ -157,7 +203,23 @@ def display_and_get_memory_addresses(
 
 
 
-def bert_preprocessing(sentence):
+def bert_preprocessing(sentence: str, remove_stopwords: bool = True) -> typing.List[str]:
+    """
+    Preprocesses the sentence token list resulting from BERT's tokenizer.
+    
+    Passes a sentence through BERT's tokenizer, reconstructs words from
+    subwords, and removes uninformative tokens.
+    
+    The uniformative tokens are:
+       i) subwords: Start with '##;'
+       ii) punctuation: Use string.punctuation to identify them;
+       iii) other: Uninformative characters that are not part of 'string.punctuation;'
+    Optionally, stop words ('stopwords' from 'nltk.corpus') are also removed.
+       
+    Args:
+        sentence: Sentence whose token list is processes.
+        remove_stopwords: If True, stop words are also removed.
+    """
     model_name = "bert-base-uncased"  # Has 12 layers
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -182,7 +244,9 @@ def bert_preprocessing(sentence):
     stopwords_idx = np.array([label in stopwords.words('english') for label in labels])
     punctuation_idx = np.array([label in string.punctuation for label in labels])
     dash_idx = np.array([(len(label) == 1 and ord(label) == 8211) for label in labels])
-    remove_idx = hashtag_idx | punctuation_idx | dash_idx #| stopwords_idx
+    remove_idx = hashtag_idx | punctuation_idx | dash_idx
+    if remove_stopwords:
+        remove_idx |= stopwords_idx
     labels = np.array(labels)[~remove_idx]
     return labels[1:(len(labels) - 1)]
 

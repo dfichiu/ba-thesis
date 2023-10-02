@@ -1,3 +1,4 @@
+"""This file implements the functions needed to build subsequences from a weighted directed graph."""
 import networkx as nx
 import numpy as np
 import torch
@@ -32,7 +33,7 @@ def forward_pass(G, current_node, left_edge, right_edge, sequence, mean, sequenc
     return
     
 
-def construct_sequences(G: nx.DiGraph, n_tokens):
+def construct_sequences(G: nx.DiGraph, n_tokens: int):
     sequences = []
     means = []
     
