@@ -1,0 +1,3 @@
+This folder contains the Jupyter notebooks that served as a basis for developing the final algorithm used in [src/lib/memory/DSDM.py](https://github.com/dfichiu/ba-thesis/blob/master/src/lib/memory/DSDM.py) and the [codebook](https://github.com/dfichiu/ba-thesis/blob/master/src/lib/utils/cleanup.py). Moreover, it also contains notebooks where initial experiments with VSAs are performed.
+
+While once functional, in time, due to the [library](https://github.com/dfichiu/ba-thesis/tree/master/src/lib) functions sustaining modifications, the notebooks are no longer running without mistakes.
