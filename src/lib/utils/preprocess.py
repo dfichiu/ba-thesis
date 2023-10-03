@@ -31,6 +31,7 @@ def add_whitespace_before_punctuation(sentences):
 def tokenize_sentence(sentences):
     return [nltk.word_tokenize(s) for s in sentences]
 
+
 pipeline = Pipeline([
     ('tokenize-text-into-sentences', FunctionTransformer(split_text_into_sentences)),
     ('add-whitespace-before-punctuation', FunctionTransformer(add_whitespace_before_punctuation)),
@@ -40,9 +41,34 @@ pipeline = Pipeline([
     ('remove-stopwords', FunctionTransformer(remove_stopwords))
 ])
 
+pipeline_with_sw = Pipeline([
+    ('tokenize-text-into-sentences', FunctionTransformer(split_text_into_sentences)),
+    ('add-whitespace-before-punctuation', FunctionTransformer(add_whitespace_before_punctuation)),
+    ('lowercase', FunctionTransformer(lowercase)),
+    ('remove-punctuation', FunctionTransformer(remove_punctuation)),
+    ('tokenize-sentence', FunctionTransformer(tokenize_sentence)),
+#     ('remove-stopwords', FunctionTransformer(remove_stopwords))
+])
+
+
 def preprocess_text(text: str) -> List[str]:
-    """Apply preprocessing pipeline to a piece of text."""
+    """Applies preprocessing pipeline to a piece of text.
+    
+    Stop words are removed.
+    """
     global pipeline
     pipeline.fit(text)
 
     return pipeline.transform(text)
+
+
+def preprocess_text_keep_sw(text: str) -> List[str]:
+    """Applies preprocessing pipeline to a piece of text.
+
+    Stop words are not removed.
+    """
+    global pipeline_with_sw
+    
+    pipeline_with_sw.fit(text)
+
+    return pipeline_with_sw.transform(text)
