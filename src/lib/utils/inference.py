@@ -257,15 +257,16 @@ def infer(
     memory: DSDM.DSDM,
     inference_sentences: typing.List[typing.Union[str, typing.List]],
     retrieve_mode: str = "pooling",
+    remove_stopwords: bool = True, 
     k=None,
-    output=False
+    output: bool = False
 ) -> typing.Union[pd.DataFrame, typing.List[typing.List]]:
 
     retrieved_contents = []
         
     for s in inference_sentences:
-        #tokens_list = preprocess.preprocess_text(s)[0] if isinstance(s, str) else s
-        tokens_list = bert_preprocessing(s)
+#         tokens_list = preprocess.preprocess_text(s)[0] if isinstance(s, str) else s
+        tokens_list = bert_preprocessing(s, remove_stopwords)
         
         retrieved_content = memory.retrieve(
             query_address=generate_query(
