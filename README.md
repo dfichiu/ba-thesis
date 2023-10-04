@@ -78,6 +78,6 @@ The `normalization-experimentss` folder contains Jupyter notebooks that performe
 ## Requirements
 The requirements can be found in `requirements.txt`. If you are running the project on the PVS server, activate the conda environment `daniela-py39-clone`.
 
-### One-click demo
+## One-click demo
 To run the one-click demo, once you've installed the requirements/activated the PVS conda environment (the project is located in `dfichiu/ba-thesis`), run `/src/experiments/run_experiment.sh`.
 The script runs the Jupyter notebooks in `src/experiments` and saves the created plots and the run notebooks as .html pages. The results produced by the script are saved in the subfolder `/src/experiments/results`. 
