@@ -67,7 +67,7 @@ The `experiments` folder contains the code of the latest experiments. The file t
   * `train_memory.py`: Train memory by mining Transformer self-attention matrices;
   * `train_SWNmemory.ipynb`: Train memory using the sliding window n-gram method.
   * Depending on the method, the trained memory and the associated codebook are saved in the subfolders `/memories/method1` (sliding window) or `/memories/method2` (Transformer self-attention) and `/cleanups/method1` (sliding window) or `/cleanup/method2`, respectively.
-* `.sh` file: One-click-demo of the entire project. The script runs the Jupyter notebooks, saves the created plots and the run notebook as .html pages. The results produced by the script are saved in the subfolder `/results`. 
+* `.sh` file - `run_experiment.sh`: One-click demo of the entire project. The script runs the Jupyter notebooks and saves the created plots and the run notebooks as .html pages. The results produced by the script are saved in the subfolder `/results`. 
 
 ### Deprecated
 The `deprecated` folder contains Jupyter notebooks that helped in developing the code for [DSDM](https://github.com/dfichiu/ba-thesis/blob/master/src/lib/memory/DSDM.py) and [Cleanup](https://github.com/dfichiu/ba-thesis/blob/master/src/lib/utils/cleanup.py), the codebook saving the token-hypervector associations. Due to library changes, the notebooks do not run without errors anymore.
@@ -76,5 +76,8 @@ The `deprecated` folder contains Jupyter notebooks that helped in developing the
 The `normalization-experimentss` folder contains Jupyter notebooks that performed experiments in the context of the sliding window n-gram method with unnormalized and normalized similarity computation. (The script `run_experiment.sh` was run with a configuration file from the `/configs` subfolder; the data for the experiments is located in the subfolder `/data`. The script parametrized the Jupyter notebook `experiment_template.ipynb` based on the chosen configuration file and the resulting .html of the run notebook was saved in the `/results` subfolder.) Due to library changes, the current output has to be reformatted. However, the results of the performed experiments can be seen in the `results` subfolder
 
 ## Requirements
-The requirements can be found in `requirements.txt`.
+The requirements can be found in `requirements.txt`. If you are running the project on the PVS server, activate the conda environment `daniela-py39-clone`.
 
+### One-click demo
+To run the one-click demo, once you've installed the requirements/activated the PVS conda environment (the project is located in `dfichiu/ba-thesis`), run `/src/experiments/run_experiment.sh`.
+The script runs the Jupyter notebooks in `src/experiments` and saves the created plots and the run notebooks as .html pages. The results produced by the script are saved in the subfolder `/src/experiments/results`. 
