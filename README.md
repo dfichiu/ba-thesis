@@ -4,6 +4,10 @@ _Learning by chunking_ refers to the process of breaking a large piece of inform
 
 Inspired by learning by chunking, we explore the novel possibility of designing a neurally motivated chunking system applied to textual data. We noted that chunks constitute concepts. Therefore, our objective can be equivalently restated as an attempt to construct a system capable of creating concepts from text, which amounts to training, and identifying and extracting the constructed concepts from a given text, which amounts to inference.
 
+To create concepts, we explore two creational avenues: 
+1. In the first method, we develop abstract concepts outgoing from [Hofstadter, 2001](http://worrydream.com/refs/Hofstadter%20-%20Analogy%20as%20the%20Core%20of%20Cognition.pdf)’s definition of abstract concepts, who defined concepts as "packets of analogies;"
+2. Due to the very experimental nature of the first method, instead of trying to develop con- cepts, in the second method we construct concepts by directly mining relationships between words captured by the Transformer Attention. [Vaswani et al., 2017](https://arxiv.org/pdf/1706.03762.pdf)
+
 ## Project structure
 ```
 .
